@@ -29,19 +29,19 @@ func (c Color) Println(a ...interface{}) {
 	trace := GetTrace(2)
 	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprintln(a...))
 }
-func (c Color) printf(skip int, format string, a ...interface{}) {
+func (c Color) Outputf(skip int, format string, a ...interface{}) {
 	trace := GetTrace(skip + 2)
 	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprintf(format, a...))
 }
 
-// println 以默认格式打印参数，输出带颜色的文本并换行
-func (c Color) println(skip int, a ...interface{}) {
+// Outputln 以默认格式打印参数，输出带颜色的文本并换行
+func (c Color) Outputln(skip int, a ...interface{}) {
 	trace := GetTrace(skip + 2)
 	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprintln(a...))
 }
 
-// print 以默认格式打印参数，输出带颜色的文本
-func (c Color) print(skip int, a ...interface{}) {
+// Output 以默认格式打印参数，输出带颜色的文本
+func (c Color) Output(skip int, a ...interface{}) {
 	trace := GetTrace(skip + 2)
 	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprint(a...))
 }
