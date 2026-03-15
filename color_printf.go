@@ -29,22 +29,18 @@ func (c Color) Println(a ...interface{}) {
 	trace := GetTrace(2)
 	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprintln(a...))
 }
-func (c Color) Outputf(skip int, format string, a ...interface{}) {
+func (c Color) TracePrintf(skip int, format string, a ...interface{}) {
 	trace := GetTrace(skip + 2)
 	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprintf(format, a...))
 }
 
-// Outputln 以默认格式打印参数，输出带颜色的文本并换行
-func (c Color) Outputln(skip int, a ...interface{}) {
+// TracePrintln 以默认格式打印参数，输出带颜色的文本并换行
+func (c Color) TracePrintln(skip int, a ...interface{}) {
 	trace := GetTrace(skip + 2)
 	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprintln(a...))
 }
 
-// Output 以默认格式打印参数，输出带颜色的文本
-func (c Color) Output(skip int, a ...interface{}) {
-	trace := GetTrace(skip + 2)
-	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprint(a...))
-}
+//下面的函数可以用于直接获取彩色字符串，可以使用原生 fmt.Print 函数打印多色字符
 
 // Sprintf 返回带颜色的格式化字符串
 func (c Color) Sprintf(format string, a ...interface{}) string {
