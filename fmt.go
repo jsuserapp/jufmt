@@ -11,3 +11,6 @@ func Println(a ...any) {
 func Sprintf(format string, a ...any) string {
 	return gofmt.Sprintf(format, a...)
 }
+func Errorf(format string, a ...any) error {
+	return gofmt.Errorf(format, a...)
+}
