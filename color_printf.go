@@ -23,6 +23,9 @@ func (c Color) Printf(format string, a ...interface{}) {
 	trace := GetTrace(2)
 	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprintf(format, a...))
 }
+func (c Color) Errorf(format string, a ...any) error {
+	return fmt.Errorf(format, a...)
+}
 
 // Println 输出带颜色的文本并换行
 func (c Color) Println(a ...interface{}) {
