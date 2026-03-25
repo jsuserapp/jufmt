@@ -13,4 +13,13 @@ func main() {
 	hello := jufmt.Yellow.Sprintf("%s", "Hello")
 	world := jufmt.Red.Sprintf("%s", "World")
 	jufmt.Printf("%s %s\n", hello, world)
+
+	traceTest1()
+}
+func traceTest1() {
+	jufmt.Green.TracePrintln(1, "traceTest1")
+	traceTest2()
+}
+func traceTest2() {
+	jufmt.Cyan.TracePrintln(2, "traceTest2")
 }

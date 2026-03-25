@@ -29,15 +29,45 @@ func (c Color) Println(a ...interface{}) {
 	trace := GetTrace(2)
 	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprintln(a...))
 }
-func (c Color) TracePrintf(skip int, format string, a ...interface{}) {
+
+// TracePrintf 以 format 格式打印参数，输出带颜色的文本并换行，skip < 0 相当于默认值 0
+func (c Color) tracePrintf(skip int, format string, a ...interface{}) {
+	if skip < 0 {
+		skip = 0
+	}
 	trace := GetTrace(skip + 2)
 	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprintf(format, a...))
 }
 
-// TracePrintln 以默认格式打印参数，输出带颜色的文本并换行
-func (c Color) TracePrintln(skip int, a ...interface{}) {
+// TracePrintln 以默认格式打印参数，输出带颜色的文本并换行，skip < 0 相当于默认值 0
+func (c Color) tracePrintln(skip int, a ...interface{}) {
+	if skip < 0 {
+		skip = 0
+	}
 	trace := GetTrace(skip + 2)
 	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprintln(a...))
+}
+
+// TracePrintln 打印多步调用位置，exStep 是额外打印多少步调用信息，exStep < 0 等同于默认值 0
+func (c Color) TracePrintln(exStep int, a ...any) {
+	if exStep < 0 {
+		exStep = 0
+	}
+	for i := exStep - 1; i >= 0; i-- {
+		c.tracePrintf(i+2, "[call %d]\n", i+1)
+	}
+	c.tracePrintln(1, a...)
+}
+
+// TracePrintf 打印多步调用位置，exStep 是额外打印多少步调用信息，exStep < 0 等同于默认值 0
+func (c Color) TracePrintf(exStep int, format string, a ...any) {
+	if exStep < 0 {
+		exStep = 0
+	}
+	for i := exStep - 2; i >= 0; i-- {
+		c.tracePrintln(i+2, "call")
+	}
+	c.tracePrintf(1, format, a...)
 }
 
 //下面的函数可以用于直接获取彩色字符串，可以使用原生 fmt.Print 函数打印多色字符
