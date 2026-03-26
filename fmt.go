@@ -1,12 +1,17 @@
 package jufmt
 
-import gofmt "fmt"
+import (
+	gofmt "fmt"
+	"os"
+)
 
 func Printf(format string, a ...any) {
-	BrightWhite.TracePrintf(1, format, a...)
+	trace := GetTrace(2)
+	gofmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, BrightWhite.Sprintf(format, a...))
 }
 func Println(a ...any) {
-	BrightWhite.TracePrintln(1, a...)
+	trace := GetTrace(2)
+	gofmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, BrightWhite.Sprintln(a...))
 }
 func Sprintf(format string, a ...any) string {
 	return gofmt.Sprintf(format, a...)
