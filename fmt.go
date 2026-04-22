@@ -14,8 +14,6 @@ func Printf(format string, a ...any) {
 		prefix += GetTrace(2) + " "
 	}
 	gofmt.Fprint(os.Stdout, prefix+BrightWhite.Sprintf(format, a...))
-	//trace := GetTrace(2)
-	//gofmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, BrightWhite.Sprintf(format, a...))
 }
 func Println(a ...any) {
 	var prefix string
@@ -26,8 +24,16 @@ func Println(a ...any) {
 		prefix += GetTrace(2) + " "
 	}
 	gofmt.Fprint(os.Stdout, prefix+BrightWhite.Sprintln(a...))
-	//trace := GetTrace(2)
-	//gofmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, BrightWhite.Sprintln(a...))
+}
+func Print(a ...any) {
+	var prefix string
+	if printTime {
+		prefix += GetNowTimeMs() + " "
+	}
+	if printTrace {
+		prefix += GetTrace(2) + " "
+	}
+	gofmt.Fprint(os.Stdout, prefix+BrightWhite.Sprint(a...))
 }
 func Sprintf(format string, a ...any) string {
 	return gofmt.Sprintf(format, a...)
