@@ -5,6 +5,8 @@ import (
 )
 
 func main() {
+	jufmt.SetPrintTime(false)
+	jufmt.SetPrintTrace(false)
 	jufmt.Println("Hello World")
 	jufmt.Printf("%s %s\n", "Hello", "World")
 	jufmt.Green.Println("Hello World")

@@ -13,6 +13,21 @@ const (
 	reset = "\033[0m"
 )
 
+var (
+	printTime  = true
+	printTrace = true
+)
+
+// SetPrintTime enables or disables the inclusion of timestamps in printed output based on the provided flag.
+func SetPrintTime(enabled bool) {
+	printTime = enabled
+}
+
+// SetPrintTrace enables or disables the inclusion of trace information in printed output based on the provided flag.
+func SetPrintTrace(enabled bool) {
+	printTrace = enabled
+}
+
 // Color 类型
 type Color struct {
 	code string
@@ -20,54 +35,78 @@ type Color struct {
 
 // Printf 输出带颜色的格式化文本
 func (c Color) Printf(format string, a ...interface{}) {
-	trace := GetTrace(2)
-	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprintf(format, a...))
+	var prefix string
+	if printTime {
+		prefix += GetNowTimeMs() + " "
+	}
+	if printTrace {
+		prefix += GetTrace(2) + " "
+	}
+	fmt.Fprint(os.Stdout, prefix+c.Sprintf(format, a...))
 }
 
 // Println 输出带颜色的文本并换行
 func (c Color) Println(a ...interface{}) {
-	trace := GetTrace(2)
-	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprintln(a...))
+	var prefix string
+	if printTime {
+		prefix += GetNowTimeMs() + " "
+	}
+	if printTrace {
+		prefix += GetTrace(2) + " "
+	}
+	fmt.Fprint(os.Stdout, prefix+c.Sprintln(a...))
 }
 
 // TracePrintf 以 format 格式打印参数，输出带颜色的文本并换行，skip < 0 相当于默认值 0
-func (c Color) tracePrintf(skip int, format string, a ...interface{}) {
+func (c Color) tracePrintf(printTrace bool, skip int, format string, a ...interface{}) {
 	if skip < 0 {
 		skip = 0
 	}
-	trace := GetTrace(skip + 2)
-	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprintf(format, a...))
+	var prefix string
+	if printTime {
+		prefix += GetNowTimeMs() + " "
+	}
+	if printTrace {
+		prefix += GetTrace(skip+2) + " "
+	}
+	fmt.Fprint(os.Stdout, prefix+c.Sprintf(format, a...))
 }
 
 // TracePrintln 以默认格式打印参数，输出带颜色的文本并换行，skip < 0 相当于默认值 0
-func (c Color) tracePrintln(skip int, a ...interface{}) {
+func (c Color) tracePrintln(printTrace bool, skip int, a ...interface{}) {
 	if skip < 0 {
 		skip = 0
 	}
-	trace := GetTrace(skip + 2)
-	fmt.Fprintf(os.Stdout, "%s %s %s", GetNowTimeMs(), trace, c.Sprintln(a...))
+	var prefix string
+	if printTime {
+		prefix += GetNowTimeMs() + " "
+	}
+	if printTrace {
+		prefix += GetTrace(skip+2) + " "
+	}
+	fmt.Fprint(os.Stdout, prefix+c.Sprintln(a...))
 }
 
-// TracePrintln 打印多步调用位置，exStep 是额外打印多少步调用信息，exStep < 0 等同于默认值 0
+// TracePrintln 打印多步调用位置，exStep 是额外打印多少步调用信息，exStep < 0 等同于默认值 0，这个函数无视全局的 PrintTrace 设置，总是打印调用信息
 func (c Color) TracePrintln(exStep int, a ...any) {
 	if exStep < 0 {
 		exStep = 0
 	}
 	for i := exStep - 1; i >= 0; i-- {
-		c.tracePrintf(i+2, "[call %d]\n", i+1)
+		c.tracePrintf(true, i+2, "[call %d]\n", i+1)
 	}
-	c.tracePrintln(1, a...)
+	c.tracePrintln(true, 1, a...)
 }
 
-// TracePrintf 打印多步调用位置，exStep 是额外打印多少步调用信息，exStep < 0 等同于默认值 0
+// TracePrintf 打印多步调用位置，exStep 是额外打印多少步调用信息，exStep < 0 等同于默认值 0，这个函数无视全局的 PrintTrace 设置，总是打印调用信息
 func (c Color) TracePrintf(exStep int, format string, a ...any) {
 	if exStep < 0 {
 		exStep = 0
 	}
 	for i := exStep - 2; i >= 0; i-- {
-		c.tracePrintln(i+2, "call")
+		c.tracePrintln(true, i+2, "call")
 	}
-	c.tracePrintf(1, format, a...)
+	c.tracePrintf(true, 1, format, a...)
 }
 
 //下面的函数可以用于直接获取彩色字符串，可以使用原生 fmt.Print 函数打印多色字符
