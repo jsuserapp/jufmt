@@ -57,6 +57,18 @@ func (c Color) Println(a ...interface{}) {
 	fmt.Fprint(os.Stdout, prefix+c.Sprintln(a...))
 }
 
+// Print 输出带颜色的文本并换行
+func (c Color) Print(a ...interface{}) {
+	var prefix string
+	if printTime {
+		prefix += GetNowTimeMs() + " "
+	}
+	if printTrace {
+		prefix += GetTrace(2) + " "
+	}
+	fmt.Fprint(os.Stdout, prefix+c.Sprint(a...))
+}
+
 // TracePrintf 以 format 格式打印参数，输出带颜色的文本并换行，skip < 0 相当于默认值 0
 func (c Color) tracePrintf(printTrace bool, skip int, format string, a ...interface{}) {
 	if skip < 0 {
