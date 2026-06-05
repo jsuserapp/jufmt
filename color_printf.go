@@ -1,143 +1,91 @@
 package jufmt
 
-import (
-	"fmt"
-	"os"
-	"path"
-	"runtime"
-	"time"
-)
+import "fmt"
 
-// ANSI 颜色码
-const (
-	reset = "\033[0m"
-)
-
-var (
-	printTime  = true
-	printTrace = true
-)
-
-// SetPrintTime enables or disables the inclusion of timestamps in printed output based on the provided flag.
-func SetPrintTime(enabled bool) {
-	printTime = enabled
-}
-
-// SetPrintTrace enables or disables the inclusion of trace information in printed output based on the provided flag.
-func SetPrintTrace(enabled bool) {
-	printTrace = enabled
-}
-
-// Color 类型
+// Color wraps an ANSI escape sequence for terminal text styling.
 type Color struct {
 	code string
 }
 
-// Printf 输出带颜色的格式化文本
+// Printf writes formatted, colored text to Output without a trailing newline.
 func (c Color) Printf(format string, a ...interface{}) {
-	var prefix string
-	if printTime {
-		prefix += GetNowTimeMs() + " "
-	}
-	if printTrace {
-		prefix += GetTrace(2) + " "
-	}
-	fmt.Fprint(os.Stdout, prefix+c.Sprintf(format, a...))
+	_, _ = fmt.Fprint(Output, buildPrefix(0, false)+c.Sprintf(format, a...))
 }
 
-// Println 输出带颜色的文本并换行
+// Println writes colored text to Output with a trailing newline.
 func (c Color) Println(a ...interface{}) {
-	var prefix string
-	if printTime {
-		prefix += GetNowTimeMs() + " "
-	}
-	if printTrace {
-		prefix += GetTrace(2) + " "
-	}
-	fmt.Fprint(os.Stdout, prefix+c.Sprintln(a...))
+	_, _ = fmt.Fprint(Output, buildPrefix(0, false)+c.Sprintln(a...))
 }
 
-// Print 输出带颜色的文本并换行
+// Print writes colored text to Output without a trailing newline.
 func (c Color) Print(a ...interface{}) {
-	var prefix string
-	if printTime {
-		prefix += GetNowTimeMs() + " "
-	}
-	if printTrace {
-		prefix += GetTrace(2) + " "
-	}
-	fmt.Fprint(os.Stdout, prefix+c.Sprint(a...))
+	_, _ = fmt.Fprint(Output, buildPrefix(0, false)+c.Sprint(a...))
 }
 
-// TracePrintf 以 format 格式打印参数，输出带颜色的文本并换行，skip < 0 相当于默认值 0
-func (c Color) tracePrintf(printTrace bool, skip int, format string, a ...interface{}) {
-	if skip < 0 {
-		skip = 0
-	}
-	var prefix string
-	if printTime {
-		prefix += GetNowTimeMs() + " "
-	}
-	if printTrace {
-		prefix += GetTrace(skip+2) + " "
-	}
-	fmt.Fprint(os.Stdout, prefix+c.Sprintf(format, a...))
+func (c Color) tracePrintln(forceTrace bool, a ...interface{}) {
+	_, _ = fmt.Fprint(Output, buildPrefix(0, forceTrace)+c.Sprintln(a...))
 }
 
-// TracePrintln 以默认格式打印参数，输出带颜色的文本并换行，skip < 0 相当于默认值 0
-func (c Color) tracePrintln(printTrace bool, skip int, a ...interface{}) {
-	if skip < 0 {
-		skip = 0
-	}
-	var prefix string
-	if printTime {
-		prefix += GetNowTimeMs() + " "
-	}
-	if printTrace {
-		prefix += GetTrace(skip+2) + " "
-	}
-	fmt.Fprint(os.Stdout, prefix+c.Sprintln(a...))
+func (c Color) tracePrintf(forceTrace bool, format string, a ...interface{}) {
+	_, _ = fmt.Fprint(Output, buildPrefix(0, forceTrace)+c.Sprintf(format, a...))
 }
 
-// TracePrintln 打印多步调用位置，exStep 是额外打印多少步调用信息，exStep < 0 等同于默认值 0，这个函数无视全局的 PrintTrace 设置，总是打印调用信息
+// TracePrintln writes a message with optional upstream call-site lines.
+//
+// exStep is the number of extra caller frames to print as [call N] lines.
+// N=1 is the nearest upstream frame, N=2 is one level further up, and so on.
+// Lines are printed in execution order: [call exStep] first (earliest call),
+// then ... [call 1], then the main message. Negative exStep is treated as 0.
+// Call-site prefixes are always included,
+// regardless of SetPrintTrace. Upstream frames inside Go runtime or the standard
+// library are omitted.
 func (c Color) TracePrintln(exStep int, a ...any) {
 	if exStep < 0 {
 		exStep = 0
 	}
-	for i := exStep - 1; i >= 0; i-- {
-		c.tracePrintf(true, i+2, "[call %d]\n", i+1)
+	for i := exStep; i >= 1; i-- {
+		if prefix := formatCallPrefix(i); prefix != "" {
+			_, _ = fmt.Fprint(Output, prefix+c.Sprintf("[call %d]\n", i))
+		}
 	}
-	c.tracePrintln(true, 1, a...)
+	c.tracePrintln(true, a...)
 }
 
-// TracePrintf 打印多步调用位置，exStep 是额外打印多少步调用信息，exStep < 0 等同于默认值 0，这个函数无视全局的 PrintTrace 设置，总是打印调用信息
+// TracePrintf is like TracePrintln but with fmt.Printf-style formatting.
 func (c Color) TracePrintf(exStep int, format string, a ...any) {
 	if exStep < 0 {
 		exStep = 0
 	}
-	for i := exStep - 2; i >= 0; i-- {
-		c.tracePrintln(true, i+2, "call")
+	for i := exStep; i >= 1; i-- {
+		if prefix := formatCallPrefix(i); prefix != "" {
+			_, _ = fmt.Fprint(Output, prefix+c.Sprintf("[call %d]\n", i))
+		}
 	}
-	c.tracePrintf(true, 1, format, a...)
+	c.tracePrintf(true, format, a...)
 }
 
-//下面的函数可以用于直接获取彩色字符串，可以使用原生 fmt.Print 函数打印多色字符
-
-// Sprintf 返回带颜色的格式化字符串
+// Sprintf returns a formatted string wrapped with ANSI color codes.
+// The result can be passed to standard fmt print functions for multi-color output.
 func (c Color) Sprintf(format string, a ...interface{}) string {
 	return c.code + fmt.Sprintf(format, a...) + reset
 }
+
+// Sprintln returns a line-oriented string wrapped with ANSI color codes.
 func (c Color) Sprintln(a ...interface{}) string {
 	return c.code + fmt.Sprintln(a...) + reset
 }
+
+// Sprint returns a string wrapped with ANSI color codes.
 func (c Color) Sprint(a ...interface{}) string {
 	return c.code + fmt.Sprint(a...) + reset
 }
 
-// 16 个标准颜色变量
-var (
-	// 普通色
+const (
+	reset = "\033[0m"
+)
 
+// Standard ANSI foreground colors.
+var (
 	Black   = Color{"\033[30m"}
 	Red     = Color{"\033[31m"}
 	Green   = Color{"\033[32m"}
@@ -147,9 +95,7 @@ var (
 	Cyan    = Color{"\033[36m"}
 	White   = Color{"\033[37m"}
 
-	// 亮色（高亮）
-
-	BrightBlack   = Color{"\033[90m"} // 即 Gray
+	BrightBlack   = Color{"\033[90m"}
 	BrightRed     = Color{"\033[91m"}
 	BrightGreen   = Color{"\033[92m"}
 	BrightYellow  = Color{"\033[93m"}
@@ -158,20 +104,5 @@ var (
 	BrightCyan    = Color{"\033[96m"}
 	BrightWhite   = Color{"\033[97m"}
 
-	// 别名
-
 	Gray = BrightBlack
 )
-
-func GetNowTimeMs() string {
-	return time.Now().Format("15:04:05.000")
-}
-
-func GetTrace(skip int) string {
-	_, file, line, ok := runtime.Caller(skip)
-	if !ok {
-		return "unknown:0"
-	}
-	file = path.Base(file)
-	return fmt.Sprintf("%s:%d", file, line)
-}
