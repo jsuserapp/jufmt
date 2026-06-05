@@ -8,14 +8,74 @@ Prints optional timestamps and call-site locations (`file:line`) alongside messa
 
 ## Call-site tracing
 
-- `Print`, `Println`, `Printf`, and the same methods on `Color`: call-site prefixes are controlled by `SetPrintTrace` and show the **direct caller**.
-- `TracePrintln` / `TracePrintf`: always include call-site information; `exStep` adds upstream `[call N]` lines (N=1 is nearest upstream, N=2 is further up). Lines are printed in execution order: `[call exStep]` first, then ... `[call 1]`, then the main message.
-- Locations are collected with `runtime.Callers`, skipping jufmt internals, the Go runtime (e.g. `proc.go`), and the standard library (GOROOT). Only user/application frames are kept; no fixed `skip` values.
-- `GetTrace(depth)`: `depth=0` is the direct caller, `depth=1` is one level up, and so on.
+- `Print`, `Println`, `Printf`, and the same methods on `Color`: call-site prefixes are controlled by `SetPrintTrace` and show the **direct caller** as `file:line`.
+- `TracePrintln` / `TracePrintf`: always include call-site on the main line; `exStep` adds upstream lines before it. Each upstream line is `file:line` plus the **short function name** at that frame. Lines are printed in execution order (earliest call first).
+- Locations use `runtime.Callers`, skipping jufmt internals, Go runtime (e.g. `proc.go`), and the standard library (GOROOT).
+- `GetTrace(depth)` returns `file:line`; `GetCallerName(depth)` returns the short function name at the same depth.
+
+Example (`TracePrintln(2, "traceTest2")` inside `traceTest2`, called from `traceTest1`, called from `main`):
+
+```
+main.go:19 main
+main.go:27 traceTest1
+main.go:30 traceTest2
+```
+
+## Redirecting output
+
+`Output` is an `io.Writer` (default `os.Stdout`). Assign any writer to send jufmt output elsewhere.
+
+**Log file**
+
+```go
+f, err := os.OpenFile("app.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+if err != nil { /* handle */ }
+defer f.Close()
+jufmt.Output = f
+```
+
+**Terminal and file together**
+
+```go
+jufmt.Output = io.MultiWriter(os.Stdout, f)
+```
+
+**Tests**
+
+```go
+var buf bytes.Buffer
+jufmt.Output = &buf
+jufmt.Println("capture me")
+_ = buf.String()
+```
+
+**Database or remote log service**
+
+Implement `io.Writer` and insert each `Write` payload as a log record:
+
+```go
+type dbLogWriter struct{ db *sql.DB }
+
+func (w *dbLogWriter) Write(p []byte) (int, error) {
+	_, err := w.db.Exec("INSERT INTO logs(body) VALUES (?)", string(p))
+	if err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+// jufmt.Output = &dbLogWriter{db: conn}
+```
+
+Notes:
+
+- jufmt writes **plain text** (with ANSI codes when using `Color`). A custom writer receives finished byte chunks, not structured fields.
+- For databases, prefer one line per `Println`/`TracePrintln` call; avoid relying on partial `Print` fragments.
+- Strip ANSI codes before storing if terminals are not the consumer (`strings` or a small strip helper).
+- `SetPrintTime(false)` and bright colors are often disabled when logging to files or DB.
 
 ## Other
 
-- `Output`: redirect output for tests or files; defaults to `os.Stdout`.
 - `Log`: package-level default `Logger` instance.
 
 Because each print adds a prefix, output is usually one line at a time. Unlike plain `fmt`, chaining partial-line writes without newlines tends to look messy when prefixes are concatenated.

@@ -32,20 +32,19 @@ func (c Color) tracePrintf(forceTrace bool, format string, a ...interface{}) {
 
 // TracePrintln writes a message with optional upstream call-site lines.
 //
-// exStep is the number of extra caller frames to print as [call N] lines.
-// N=1 is the nearest upstream frame, N=2 is one level further up, and so on.
-// Lines are printed in execution order: [call exStep] first (earliest call),
-// then ... [call 1], then the main message. Negative exStep is treated as 0.
-// Call-site prefixes are always included,
-// regardless of SetPrintTrace. Upstream frames inside Go runtime or the standard
-// library are omitted.
+// exStep is the number of extra caller frames to print before the main message.
+// Each upstream line shows file:line and the short function name at that frame.
+// Lines are printed in execution order: the furthest upstream frame first,
+// then nearer frames, then the main message. Negative exStep is treated as 0.
+// Call-site prefixes are always included, regardless of SetPrintTrace.
+// Upstream frames inside Go runtime or the standard library are omitted.
 func (c Color) TracePrintln(exStep int, a ...any) {
 	if exStep < 0 {
 		exStep = 0
 	}
 	for i := exStep; i >= 1; i-- {
-		if prefix := formatCallPrefix(i); prefix != "" {
-			_, _ = fmt.Fprint(Output, prefix+c.Sprintf("[call %d]\n", i))
+		if prefix, name, ok := formatCallLine(i); ok {
+			_, _ = fmt.Fprint(Output, prefix+c.Sprintf("%s\n", name))
 		}
 	}
 	c.tracePrintln(true, a...)
@@ -57,8 +56,8 @@ func (c Color) TracePrintf(exStep int, format string, a ...any) {
 		exStep = 0
 	}
 	for i := exStep; i >= 1; i-- {
-		if prefix := formatCallPrefix(i); prefix != "" {
-			_, _ = fmt.Fprint(Output, prefix+c.Sprintf("[call %d]\n", i))
+		if prefix, name, ok := formatCallLine(i); ok {
+			_, _ = fmt.Fprint(Output, prefix+c.Sprintf("%s\n", name))
 		}
 	}
 	c.tracePrintf(true, format, a...)

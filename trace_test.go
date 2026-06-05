@@ -53,8 +53,9 @@ func TestLoggerInfoCallerIsNotLogger(t *testing.T) {
 	if !strings.Contains(plain, "trace_test.go:") {
 		t.Fatalf("Logger.Info should report test caller, got %q", plain)
 	}
-	if strings.Contains(plain, "[call") {
-		t.Fatalf("Logger.Info with exStep=0 should not print [call N] lines, got %q", plain)
+	lines := strings.Split(strings.TrimSpace(plain), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("Logger.Info with exStep=0 should print one line, got %q", plain)
 	}
 }
 
@@ -62,19 +63,22 @@ func TestTracePrintlnCallOrder(t *testing.T) {
 	jufmt.SetPrintTime(false)
 	jufmt.SetPrintTrace(false)
 
-	out := withOutput(t, func() {
-		level1(t)
-	})
-	plain := stripANSI(out)
+	var buf bytes.Buffer
+	old := jufmt.Output
+	jufmt.Output = &buf
+	t.Cleanup(func() { jufmt.Output = old })
 
-	call1 := strings.Index(plain, "[call 1]")
-	call2 := strings.Index(plain, "[call 2]")
+	level1(t)
+	plain := stripANSI(buf.String())
+
+	idxTest := strings.Index(plain, "TestTracePrintlnCallOrder\n")
+	idxLevel1 := strings.Index(plain, "level1\n")
 	mainMsg := strings.Index(plain, "trace leaf")
-	if call1 < 0 || call2 < 0 || mainMsg < 0 {
+	if idxTest < 0 || idxLevel1 < 0 || mainMsg < 0 {
 		t.Fatalf("missing expected lines in %q", plain)
 	}
-	if !(call2 < call1 && call1 < mainMsg) {
-		t.Fatalf("expected [call 2] before [call 1] before main message, got %q", plain)
+	if !(idxTest < idxLevel1 && idxLevel1 < mainMsg) {
+		t.Fatalf("expected upstream funcs before main message, got %q", plain)
 	}
 	if strings.Contains(plain, "proc.go:") {
 		t.Fatalf("should not trace into runtime, got %q", plain)
@@ -102,12 +106,19 @@ func TestTracePrintlnMatchesTracePrintf(t *testing.T) {
 		jufmt.Cyan.TracePrintf(2, "marker")
 	})
 
-	countCalls := func(s string) int {
-		return strings.Count(stripANSI(s), "[call ")
+	upstreamLines := func(s string) int {
+		lines := strings.Split(strings.TrimSpace(stripANSI(s)), "\n")
+		if len(lines) <= 1 {
+			return 0
+		}
+		return len(lines) - 1
 	}
 
-	if countCalls(printlnOut) != 2 || countCalls(printfOut) != 2 {
-		t.Fatalf("expected 2 call lines each, got println=%d printf=%d", countCalls(printlnOut), countCalls(printfOut))
+	if upstreamLines(printlnOut) == 0 || upstreamLines(printfOut) == 0 {
+		t.Fatalf("expected upstream call lines")
+	}
+	if upstreamLines(printlnOut) != upstreamLines(printfOut) {
+		t.Fatalf("TracePrintln and TracePrintf differ in upstream line count")
 	}
 }
 

@@ -15,8 +15,10 @@ import (
 
 const pkgPath = "github.com/jsuserapp/jufmt"
 
-// Output is the writer used by Print/Println/Printf and Color print methods.
-// Tests and integrations may redirect it to capture output.
+// Output is the destination for Print/Println/Printf and Color print methods.
+// It defaults to os.Stdout. Assign any io.Writer to redirect output—for example
+// an open file, bytes.Buffer, io.MultiWriter, or a custom writer that persists
+// records to a database or log service. See README "Redirecting output" for examples.
 var Output io.Writer = os.Stdout
 
 var (
@@ -54,15 +56,46 @@ func GetNowTimeMs() string {
 // (for example runtime.main in proc.go). Unlike runtime.Caller(skip), depth counts
 // only user-relevant frames, so it stays stable across refactors and inlining.
 func GetTrace(depth int) string {
-	frames := traceableFrames()
-	if depth < 0 || depth >= len(frames) {
+	frame, ok := getTraceableFrameAt(depth)
+	if !ok {
 		return ""
 	}
-	return formatFrame(frames[depth])
+	return formatFrame(frame)
+}
+
+// GetCallerName returns the short function name at trace depth (same semantics as GetTrace).
+func GetCallerName(depth int) string {
+	frame, ok := getTraceableFrameAt(depth)
+	if !ok {
+		return ""
+	}
+	return frameFuncName(frame)
 }
 
 func formatFrame(frame runtime.Frame) string {
 	return fmt.Sprintf("%s:%d", path.Base(frame.File), frame.Line)
+}
+
+func frameFuncName(frame runtime.Frame) string {
+	fn := frame.Function
+	if fn == "" {
+		return "unknown"
+	}
+	if i := strings.LastIndex(fn, "/"); i >= 0 {
+		fn = fn[i+1:]
+	}
+	if i := strings.LastIndex(fn, "."); i >= 0 {
+		fn = fn[i+1:]
+	}
+	return fn
+}
+
+func getTraceableFrameAt(depth int) (runtime.Frame, bool) {
+	frames := traceableFrames()
+	if depth < 0 || depth >= len(frames) {
+		return runtime.Frame{}, false
+	}
+	return frames[depth], true
 }
 
 func isInternalFrame(frame runtime.Frame) bool {
@@ -119,18 +152,18 @@ func traceableFrames() []runtime.Frame {
 	return out
 }
 
-// formatCallPrefix builds the time + location prefix for a [call N] line at trace depth.
-// Returns empty when that depth has no traceable frame (for example runtime above main).
-func formatCallPrefix(depth int) string {
-	loc := GetTrace(depth)
-	if loc == "" {
-		return ""
+// formatCallLine builds the prefix and function name for an upstream call line at depth.
+// Returns ok=false when that depth has no traceable frame.
+func formatCallLine(depth int) (prefix, funcName string, ok bool) {
+	frame, ok := getTraceableFrameAt(depth)
+	if !ok {
+		return "", "", false
 	}
-	var prefix string
 	if printTime.Load() {
 		prefix += GetNowTimeMs() + " "
 	}
-	return prefix + loc + " "
+	prefix += formatFrame(frame) + " "
+	return prefix, frameFuncName(frame), true
 }
 
 // buildPrefix assembles the time and call-site prefix for a print call.
