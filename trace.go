@@ -97,8 +97,25 @@ func frameFuncName(frame runtime.Frame) string {
 	return fn
 }
 
+// callersSkip constants are passed to runtime.Callers from traceableFrames.
+// skip 0 is Callers itself; each value counts frames through traceableFrames up to user pc[0].
+const (
+	// traceableFrames → emitMainWithSkip → emitMain → Color.Print* / package Print* → user
+	callersSkipEmitMain = 5
+	// traceableFrames → emitMainWithSkip → tracePrintln → Logger.* → user
+	callersSkipTracePrintln = 5
+	// traceableFrames → Color.TracePrint* → user
+	callersSkipTracePrint = 3
+	// traceableFrames → getTraceableFrameAt → GetTrace/GetCallerName → user
+	callersSkipGetTrace = 4
+)
+
 func getTraceableFrameAt(depth int) (runtime.Frame, bool) {
-	return frameAt(traceableFrames(), depth)
+	if depth < 0 {
+		return runtime.Frame{}, false
+	}
+	frames := traceableFrames(callersSkipGetTrace, depth+1)
+	return frameAt(frames, depth)
 }
 
 func isInternalFrame(frame runtime.Frame) bool {
@@ -135,59 +152,30 @@ func isTraceableFrame(frame runtime.Frame) bool {
 	return true
 }
 
-// traceableFrames collects user-relevant stack frames, skipping jufmt, runtime, and stdlib.
-func traceableFrames() []runtime.Frame {
-	pcs := make([]uintptr, 64)
-	// Skip runtime.Callers and traceableFrames itself.
-	n := runtime.Callers(2, pcs)
-	frames := runtime.CallersFrames(pcs[:n])
-
-	var out []runtime.Frame
+// traceableFrames collects up to exStep stack frames starting at the user call site.
+//
+// callersSkip is the runtime.Callers skip counted at the call site that invokes this
+// function (including traceableFrames itself). Each API passes its own skip so library
+// wrappers do not hard-code frame depth here.
+//
+// pc[0] is the direct user call site; pc[1] is one caller further up, and so on.
+func traceableFrames(callersSkip, exStep int) []runtime.Frame {
+	if exStep < 1 {
+		exStep = 1
+	}
+	pc := make([]uintptr, exStep)
+	n := runtime.Callers(callersSkip, pc)
+	if n == 0 {
+		return nil
+	}
+	callerFrames := runtime.CallersFrames(pc[:n])
+	out := make([]runtime.Frame, 0, n)
 	for {
-		frame, more := frames.Next()
-		if isTraceableFrame(frame) {
-			out = append(out, frame)
-		}
+		frame, more := callerFrames.Next()
+		out = append(out, frame)
 		if !more {
 			break
 		}
 	}
 	return out
-}
-
-// sourceFilePath returns a project-friendly path for LogEntry.File.
-// runtime.Frame.File is usually an absolute disk path; this converts it to a path relative
-// to the nearest go.mod directory, or relative to the process working directory as fallback.
-func sourceFilePath(runtimeFile string) string {
-	runtimeFile = filepath.Clean(runtimeFile)
-	if runtimeFile == "" {
-		return ""
-	}
-	if modRoot, ok := moduleRootFor(runtimeFile); ok {
-		if rel, err := filepath.Rel(modRoot, runtimeFile); err == nil {
-			return filepath.ToSlash(rel)
-		}
-	}
-	if filepath.IsAbs(runtimeFile) {
-		if wd, err := os.Getwd(); err == nil {
-			if rel, err := filepath.Rel(wd, runtimeFile); err == nil {
-				return filepath.ToSlash(rel)
-			}
-		}
-	}
-	return filepath.ToSlash(runtimeFile)
-}
-
-func moduleRootFor(file string) (string, bool) {
-	dir := filepath.Dir(file)
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir, true
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "", false
-		}
-		dir = parent
-	}
 }

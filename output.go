@@ -18,19 +18,18 @@ const (
 	// line of TracePrintln/TracePrintf, or Logger level output. Message holds user content.
 	LineMain LineKind = iota
 	// LineUpstream is an extra call-chain line emitted before LineMain when exStep > 0.
-	// Message holds the short function name at that upstream frame (not user text).
+	// Message holds the short function name at that upstream frame, wrapped in [brackets].
 	LineUpstream
 )
 
 // LogEntry is structured data for one emitted log line passed to LogOutputHook.
 //
-// File is the source path relative to the nearest go.mod directory when found (for example
-// main/main.go); otherwise relative to the working directory. Console prefixes still use
-// the basename only. Message is plain text without ANSI.
+// File is the source path from runtime.Frame (typically an absolute path on disk).
+// Console output still uses the basename via DefaultFormat. Message is plain text without ANSI.
 type LogEntry struct {
 	Time         time.Time // wall time of the emit; set even when TimeText is empty
 	TimeText     string    // formatted timestamp prefix; empty when SetPrintTime(false)
-	File         string    // module-relative source path; empty when location was not collected
+	File         string    // runtime source path; empty when location was not collected
 	Line         int
 	Func         string
 	Message      string
@@ -52,8 +51,8 @@ type LogHookResult struct {
 
 // LogOutputHook is invoked for each line jufmt would print.
 //
-// The library does not perform database or network I/O. Use entry fields (module-relative
-// File path, Line, Func, plain Message, Kind, etc.) inside the hook for persistence.
+// The library does not perform database or network I/O. Use entry fields (runtime File path,
+// Line, Func, plain Message, Kind, etc.) inside the hook for persistence.
 //
 // Return nil when you only need the callback and default console output is fine.
 // Return &LogHookResult{WriteOutput: false} to skip Output entirely.
@@ -154,8 +153,9 @@ func buildMainEntry(c Color, frames []runtime.Frame, forceTrace bool, plainMsg s
 	showLoc := forceTrace || printTrace.Load()
 	entry.ShowLocation = showLoc
 	if showLoc && len(frames) > 0 {
-		if frame, ok := frameAt(frames, 0); ok {
-			entry.File = sourceFilePath(frame.File)
+		frame := frames[0]
+		if isTraceableFrame(frame) {
+			entry.File = frame.File
 			entry.Line = frame.Line
 			entry.Func = frameFuncName(frame)
 		}
@@ -163,18 +163,17 @@ func buildMainEntry(c Color, frames []runtime.Frame, forceTrace bool, plainMsg s
 	return entry
 }
 
-func buildUpstreamEntry(frames []runtime.Frame, depth int) (LogEntry, bool) {
-	frame, ok := frameAt(frames, depth)
-	if !ok {
+func buildUpstreamEntryFromFrame(frame runtime.Frame) (LogEntry, bool) {
+	if !isTraceableFrame(frame) {
 		return LogEntry{}, false
 	}
 	entry := LogEntry{
 		Time:         time.Now(),
-		Message:      frameFuncName(frame),
+		Message:      "[" + frameFuncName(frame) + "]",
 		Newline:      true,
 		Kind:         LineUpstream,
 		ShowLocation: true,
-		File:         sourceFilePath(frame.File),
+		File:         frame.File,
 		Line:         frame.Line,
 		Func:         frameFuncName(frame),
 	}
@@ -185,18 +184,26 @@ func buildUpstreamEntry(frames []runtime.Frame, depth int) (LogEntry, bool) {
 }
 
 func emitMain(c Color, forceTrace bool, plainMsg string, newline bool) {
-	emit(buildMainEntry(c, collectFramesIfNeeded(forceTrace), forceTrace, plainMsg, newline))
+	emitMainWithSkip(c, callersSkipEmitMain, forceTrace, plainMsg, newline)
+}
+
+func emitMainWithSkip(c Color, callersSkip int, forceTrace bool, plainMsg string, newline bool) {
+	var frames []runtime.Frame
+	if forceTrace || printTrace.Load() {
+		frames = traceableFrames(callersSkip, 1)
+	}
+	emit(buildMainEntry(c, frames, forceTrace, plainMsg, newline))
 }
 
 func emitMainFromFrames(c Color, frames []runtime.Frame, forceTrace bool, plainMsg string, newline bool) {
 	emit(buildMainEntry(c, frames, forceTrace, plainMsg, newline))
 }
 
-// collectFramesIfNeeded walks the stack only when location will be used.
-// Matches SetPrintTime: when disabled, related fields stay empty and work is skipped.
-func collectFramesIfNeeded(forceTrace bool) []runtime.Frame {
-	if forceTrace || printTrace.Load() {
-		return traceableFrames()
+func emitUpstreamFrames(c Color, frames []runtime.Frame) {
+	for i := len(frames) - 1; i >= 1; i-- {
+		if entry, ok := buildUpstreamEntryFromFrame(frames[i]); ok {
+			entry.Color = c
+			emit(entry)
+		}
 	}
-	return nil
 }

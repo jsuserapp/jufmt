@@ -10,22 +10,22 @@ var Log = &Logger{}
 
 // Debug writes a cyan message with the caller's file:line.
 func (log *Logger) Debug(a ...any) {
-	Cyan.TracePrintln(0, a...)
+	Cyan.tracePrintln(true, a...)
 }
 
 // Info writes a green message with the caller's file:line.
 func (log *Logger) Info(a ...any) {
-	Green.TracePrintln(0, a...)
+	Green.tracePrintln(true, a...)
 }
 
 // Warn writes a yellow message with the caller's file:line.
 func (log *Logger) Warn(a ...any) {
-	Yellow.TracePrintln(0, a...)
+	Yellow.tracePrintln(true, a...)
 }
 
 // Error writes a red message with the caller's file:line.
 func (log *Logger) Error(a ...any) {
-	Red.TracePrintln(0, a...)
+	Red.tracePrintln(true, a...)
 }
 
 // With is a no-op adapter for components that expect a chainable With method.
@@ -35,6 +35,6 @@ func (log *Logger) With(_ any) *Logger {
 
 // Fatal writes a red message with the caller's file:line and exits with code 1.
 func (log *Logger) Fatal(a ...any) {
-	Red.TracePrintln(0, a...)
+	Red.tracePrintln(true, a...)
 	os.Exit(1)
 }

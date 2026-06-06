@@ -9,16 +9,16 @@ Prints optional timestamps and call-site locations (`file:line`) alongside messa
 ## Call-site tracing
 
 - `Print`, `Println`, `Printf`, and the same methods on `Color`: call-site prefixes are controlled by `SetPrintTrace` and show the **direct caller** as `file:line` (basename on console).
-- `TracePrintln` / `TracePrintf`: always include call-site on the main line; `exStep` adds upstream lines before it. Each upstream line is `file:line` plus the **short function name** at that frame. Lines are printed in execution order (earliest call first).
-- Locations use `runtime.Callers`, skipping jufmt internals, Go runtime (e.g. `proc.go`), and the standard library (GOROOT).
+- Each upstream line is `file:line` plus **`[functionName]`**; the main line is plain user text.
+- Locations use `runtime.Callers` with a caller-supplied skip and limited frame count (`traceableFrames(skip, exStep)`); upstream lines skip runtime/stdlib via `isTraceableFrame`.
 - `GetTrace(depth)` returns `file:line` (basename); `GetCallerName(depth)` returns the short function name at the same depth.
 - `SetPrintTrace(false)` on `Print`/`Println`/`Printf`: **no stack walk**; location fields stay empty (same idea as `SetPrintTime(false)` skipping `TimeText`). `TracePrintln`, `TracePrintf`, and `Logger` always collect call-site data.
 
 Example (`TracePrintln(2, "traceTest2")` inside `traceTest2`, called from `traceTest1`, called from `main`):
 
 ```
-main.go:19 main
-main.go:27 traceTest1
+main.go:19 [main]
+main.go:27 [traceTest1]
 main.go:30 traceTest2
 ```
 
@@ -28,9 +28,9 @@ main.go:30 traceTest2
 
 | Field | Use |
 |-------|-----|
-| `File` | **Module-relative path** (relative to nearest `go.mod`); empty if location not collected |
+| `File` | **Runtime source path** (usually absolute); empty if location not collected |
 | `Line`, `Func` | Call-site; empty when location not collected |
-| `Message` | Plain text, **no ANSI**; user content on `LineMain`, function name on `LineUpstream` |
+| `Message` | Plain text, **no ANSI**; user content on `LineMain`, `[func]` on `LineUpstream` |
 | `Time` | Wall-clock time (always set) |
 | `TimeText` | Formatted prefix; empty when `SetPrintTime(false)` |
 | `Newline` | `true` for Println-style (append `\n` in `DefaultFormat`); `false` for Print/Printf |
@@ -51,7 +51,7 @@ Return `*LogHookResult` (or **`nil`** for default console output):
 
 ```go
 jufmt.SetLogOutputHook(func(e jufmt.LogEntry) *jufmt.LogHookResult {
-	go dbInsert(e) // e.File is module-relative, e.Message has no ANSI
+	go dbInsert(e) // e.File is from runtime.Frame, e.Message has no ANSI
 	return nil
 })
 ```
@@ -108,3 +108,47 @@ jufmt.Log.Info("ready")
 
 jufmt.Green.TracePrintln(2, "nested trace")
 ```
+
+## Benchmarks
+
+Performance tests compare `fmt.Fprint*` (writing to `io.Discard`) with jufmt under the same output destination. Run from the module root:
+
+```bash
+# all benchmarks, with allocation stats
+go test -bench=. -benchmem ./...
+
+# compare Println only
+go test -bench='BenchmarkFmt_Fprintln|BenchmarkJufmt_Println' -benchmem ./...
+
+# longer run for stabler numbers
+go test -bench=. -benchmem -benchtime=3s -count=5 ./...
+```
+
+| Benchmark | Meaning |
+|-----------|---------|
+| `BenchmarkFmt_Fprint*` | stdlib baseline (`io.Discard`) |
+| `BenchmarkJufmt_Print*` | no timestamp, `SetPrintTrace(false)` |
+| `BenchmarkJufmt_Println_Trace` | `SetPrintTrace(true)`, one stack frame |
+| `BenchmarkJufmt_Println_TimeAndTrace` | timestamp + call-site prefix |
+| `BenchmarkJufmt_TracePrintln/exStepN` | forced trace; `exStep` upstream `[func]` lines |
+
+### Stack breakdown (Callers vs CallersFrames)
+
+Isolates stack cost with the same `callersSkip` as `Println` + trace (in-package benchmarks):
+
+| Benchmark | Meaning |
+|-----------|---------|
+| `BenchmarkStack_Empty` | baseline loop |
+| `BenchmarkStack_CallersOnly` | `runtime.Callers` only |
+| `BenchmarkStack_CallersFrames/firstFrame` | Callers + one `Next()` |
+| `BenchmarkStack_CallersFrames/allFrames` | Callers + `Next()` for every collected PC |
+| `BenchmarkStack_TraceableFrames` | full `traceableFrames` (Callers + all frames into slice) |
+
+```bash
+go test -bench=BenchmarkStack -benchmem -run=^$ .
+
+# compare stack breakdown vs full jufmt Println+trace
+go test -bench='BenchmarkStack|BenchmarkJufmt_Println_Trace' -benchmem -run=^$ .
+```
+
+jufmt adds ANSI color and optional stack walks; use `SetPrintTrace(false)` on hot `Print*` paths when you do not need call-site prefixes.

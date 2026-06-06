@@ -9,16 +9,16 @@
 ## 调用位置（trace）
 
 - `Print` / `Println` / `Printf` 及 `Color` 的同名方法：可通过 `SetPrintTrace` 开关，显示**直接调用方**的 `file:line`（控制台为文件名）。
-- `TracePrintln` / `TracePrintf`：主消息始终带调用位置；`exStep` 在其之前额外打印上游帧，每行格式为 `file:line` + **函数名**（短名）。按执行顺序输出（先发生的调用在前）。
-- 位置通过 `runtime.Callers` 收集，跳过 jufmt 内部、Go runtime（如 `proc.go`）及标准库（GOROOT）。
+- `TracePrintln` / `TracePrintf`：主消息为普通文本；上游行为 `file:line` + **`[函数名]`**，按执行顺序输出。
+- 位置通过 `runtime.Callers` 采集，由各 API 传入精准 `skip` 与帧数 `exStep`（`traceableFrames(skip, exStep)`）；上游行仍用 `isTraceableFrame` 跳过 runtime/stdlib。
 - `GetTrace(depth)` 返回 `file:line`（basename）；`GetCallerName(depth)` 返回同一深度的短函数名。
 - `SetPrintTrace(false)` 作用于 `Print`/`Println`/`Printf`：**不 walk 栈**，`File`/`Line`/`Func` 为空（与 `SetPrintTime(false)` 不写 `TimeText` 同理）。`TracePrintln`、`TracePrintf`、`Logger` 始终采集位置。
 
 示例（`main` → `traceTest1` → `traceTest2` 内 `TracePrintln(2, "traceTest2")`）：
 
 ```
-main.go:19 main
-main.go:27 traceTest1
+main.go:19 [main]
+main.go:27 [traceTest1]
 main.go:30 traceTest2
 ```
 
@@ -28,9 +28,9 @@ main.go:30 traceTest2
 
 | 字段 | 用途 |
 |------|------|
-| `File` | **模块相对路径**（相对最近 `go.mod` 目录）；未采集位置时为空 |
+| `File` | **runtime 源路径**（通常为绝对路径）；未采集位置时为空 |
 | `Line`, `Func` | 调用位置；未采集时为空 |
-| `Message` | 纯文本，**无 ANSI**；`LineMain` 为用户内容，`LineUpstream` 为上游函数名 |
+| `Message` | 纯文本，**无 ANSI**；`LineMain` 为用户内容，`LineUpstream` 为 `[函数名]` |
 | `Time` | 墙钟时间（始终有值） |
 | `TimeText` | 格式化时间前缀；`SetPrintTime(false)` 时为空 |
 | `Newline` | `true` 表示 Println 风格（`DefaultFormat` 末尾加 `\n`）；Print/Printf 为 `false` |
@@ -108,3 +108,47 @@ jufmt.Log.Info("ready")
 
 jufmt.Green.TracePrintln(2, "nested trace")
 ```
+
+## 性能测试
+
+与原生 `fmt.Fprint*`（同样写入 `io.Discard`）对比 jufmt 各 API 的开销。在模块根目录执行：
+
+```bash
+# 全部 benchmark，含内存分配
+go test -bench=. -benchmem ./...
+
+# 只对比 Println
+go test -bench='BenchmarkFmt_Fprintln|BenchmarkJufmt_Println' -benchmem ./...
+
+# 更长采样，结果更稳定
+go test -bench=. -benchmem -benchtime=3s -count=5 ./...
+```
+
+| Benchmark | 含义 |
+|-----------|------|
+| `BenchmarkFmt_Fprint*` | 标准库基线（`io.Discard`） |
+| `BenchmarkJufmt_Print*` | 无时间戳，`SetPrintTrace(false)` |
+| `BenchmarkJufmt_Println_Trace` | `SetPrintTrace(true)`，采集一层栈 |
+| `BenchmarkJufmt_Println_TimeAndTrace` | 时间戳 + 调用位置 |
+| `BenchmarkJufmt_TracePrintln/exStepN` | 强制 trace；`exStep` 条上游 `[函数名]` 行 |
+
+### 栈开销拆分（Callers vs CallersFrames）
+
+与 `Println` + trace 相同 `callersSkip` 的包内 micro-benchmark：
+
+| Benchmark | 含义 |
+|-----------|------|
+| `BenchmarkStack_Empty` | 空循环基线 |
+| `BenchmarkStack_CallersOnly` | 仅 `runtime.Callers` |
+| `BenchmarkStack_CallersFrames/firstFrame` | Callers + 一次 `Next()` |
+| `BenchmarkStack_CallersFrames/allFrames` | Callers + 对所有 PC 做 `Next()` |
+| `BenchmarkStack_TraceableFrames` | 完整 `traceableFrames` |
+
+```bash
+go test -bench=BenchmarkStack -benchmem -run=^$ .
+
+# 对比栈拆分 vs 完整 jufmt Println+trace
+go test -bench='BenchmarkStack|BenchmarkJufmt_Println_Trace' -benchmem -run=^$ .
+```
+
+jufmt 会附加 ANSI 颜色并可选 walk 栈；高频 `Print*` 若不需要位置前缀，请 `SetPrintTrace(false)`。

@@ -28,17 +28,17 @@ func (c Color) Print(a ...interface{}) {
 
 func (c Color) tracePrintln(forceTrace bool, a ...interface{}) {
 	msg := fmt.Sprintln(a...)
-	emitMain(c, forceTrace, trimNewline(msg), true)
+	emitMainWithSkip(c, callersSkipTracePrintln, forceTrace, trimNewline(msg), true)
 }
 
 func (c Color) tracePrintf(forceTrace bool, format string, a ...interface{}) {
-	emitMain(c, forceTrace, fmt.Sprintf(format, a...), false)
+	emitMainWithSkip(c, callersSkipTracePrintln, forceTrace, fmt.Sprintf(format, a...), false)
 }
 
 // TracePrintln writes a message with optional upstream call-site lines.
 //
 // exStep is the number of extra caller frames to print before the main message.
-// Each upstream line shows file:line and the short function name at that frame.
+// Each upstream line shows file:line and the function name in [brackets].
 // Lines are printed in execution order: the furthest upstream frame first,
 // then nearer frames, then the main message. Negative exStep is treated as 0.
 // Call-site prefixes are always included, regardless of SetPrintTrace.
@@ -47,13 +47,8 @@ func (c Color) TracePrintln(exStep int, a ...any) {
 	if exStep < 0 {
 		exStep = 0
 	}
-	frames := traceableFrames()
-	for i := exStep; i >= 1; i-- {
-		if entry, ok := buildUpstreamEntry(frames, i); ok {
-			entry.Color = c
-			emit(entry)
-		}
-	}
+	frames := traceableFrames(callersSkipTracePrint, exStep+1)
+	emitUpstreamFrames(c, frames)
 	msg := fmt.Sprintln(a...)
 	emitMainFromFrames(c, frames, true, trimNewline(msg), true)
 }
@@ -63,13 +58,8 @@ func (c Color) TracePrintf(exStep int, format string, a ...any) {
 	if exStep < 0 {
 		exStep = 0
 	}
-	frames := traceableFrames()
-	for i := exStep; i >= 1; i-- {
-		if entry, ok := buildUpstreamEntry(frames, i); ok {
-			entry.Color = c
-			emit(entry)
-		}
-	}
+	frames := traceableFrames(callersSkipTracePrint, exStep+1)
+	emitUpstreamFrames(c, frames)
 	emitMainFromFrames(c, frames, true, fmt.Sprintf(format, a...), false)
 }
 

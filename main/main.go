@@ -20,7 +20,7 @@ func main() {
 
 	logger := &jufmt.Logger{}
 	logger.Debug("hello world")
-	jufmt.Blue.TracePrintln(1, "hello world")
+	jufmt.Blue.TracePrintln(0, "hello world")
 }
 func traceTest1() {
 	jufmt.Green.TracePrintln(1, "traceTest1")

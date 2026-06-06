@@ -45,12 +45,3 @@ func TestIsTraceableFrame(t *testing.T) {
 		})
 	}
 }
-
-func TestGetTraceStopsBeforeRuntime(t *testing.T) {
-	frames := traceableFrames()
-	for _, frame := range frames {
-		if !isTraceableFrame(frame) {
-			t.Fatalf("traceableFrames contains non-traceable frame: %+v", frame)
-		}
-	}
-}

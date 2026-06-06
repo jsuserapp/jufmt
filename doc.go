@@ -5,6 +5,6 @@
 // patterns are compatible. Because each print adds a prefix, output is usually
 // one line at a time; chaining partial-line writes will look messy.
 //
-// Use SetLogOutputHook for structured logging (module-relative paths, plain messages)
+// Use SetLogOutputHook for structured logging (runtime source paths, plain messages).
 // Return nil from the hook to keep default console formatting; see LogHookResult.
 package jufmt
