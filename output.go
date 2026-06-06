@@ -24,13 +24,13 @@ const (
 
 // LogEntry is structured data for one emitted log line passed to LogOutputHook.
 //
-// File is the full source path when location is collected; Message is plain text without ANSI.
-// Newline is true when the line should end with '\n' (Println/TracePrintln style), false for Print/Printf.
-// ShowLocation is true when call-site fields (File, Line, Func) were collected for this line.
+// File is the source path relative to the nearest go.mod directory when found (for example
+// main/main.go); otherwise relative to the working directory. Console prefixes still use
+// the basename only. Message is plain text without ANSI.
 type LogEntry struct {
 	Time         time.Time // wall time of the emit; set even when TimeText is empty
 	TimeText     string    // formatted timestamp prefix; empty when SetPrintTime(false)
-	File         string    // full path; empty when location was not collected
+	File         string    // module-relative source path; empty when location was not collected
 	Line         int
 	Func         string
 	Message      string
@@ -52,8 +52,8 @@ type LogHookResult struct {
 
 // LogOutputHook is invoked for each line jufmt would print.
 //
-// The library does not perform database or network I/O. Use entry fields (full File path,
-// Line, Func, plain Message, Kind, etc.) inside the hook for persistence.
+// The library does not perform database or network I/O. Use entry fields (module-relative
+// File path, Line, Func, plain Message, Kind, etc.) inside the hook for persistence.
 //
 // Return nil when you only need the callback and default console output is fine.
 // Return &LogHookResult{WriteOutput: false} to skip Output entirely.
@@ -155,7 +155,7 @@ func buildMainEntry(c Color, frames []runtime.Frame, forceTrace bool, plainMsg s
 	entry.ShowLocation = showLoc
 	if showLoc && len(frames) > 0 {
 		if frame, ok := frameAt(frames, 0); ok {
-			entry.File = frame.File
+			entry.File = sourceFilePath(frame.File)
 			entry.Line = frame.Line
 			entry.Func = frameFuncName(frame)
 		}
@@ -174,7 +174,7 @@ func buildUpstreamEntry(frames []runtime.Frame, depth int) (LogEntry, bool) {
 		Newline:      true,
 		Kind:         LineUpstream,
 		ShowLocation: true,
-		File:         frame.File,
+		File:         sourceFilePath(frame.File),
 		Line:         frame.Line,
 		Func:         frameFuncName(frame),
 	}

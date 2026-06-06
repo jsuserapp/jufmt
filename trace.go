@@ -154,3 +154,40 @@ func traceableFrames() []runtime.Frame {
 	}
 	return out
 }
+
+// sourceFilePath returns a project-friendly path for LogEntry.File.
+// runtime.Frame.File is usually an absolute disk path; this converts it to a path relative
+// to the nearest go.mod directory, or relative to the process working directory as fallback.
+func sourceFilePath(runtimeFile string) string {
+	runtimeFile = filepath.Clean(runtimeFile)
+	if runtimeFile == "" {
+		return ""
+	}
+	if modRoot, ok := moduleRootFor(runtimeFile); ok {
+		if rel, err := filepath.Rel(modRoot, runtimeFile); err == nil {
+			return filepath.ToSlash(rel)
+		}
+	}
+	if filepath.IsAbs(runtimeFile) {
+		if wd, err := os.Getwd(); err == nil {
+			if rel, err := filepath.Rel(wd, runtimeFile); err == nil {
+				return filepath.ToSlash(rel)
+			}
+		}
+	}
+	return filepath.ToSlash(runtimeFile)
+}
+
+func moduleRootFor(file string) (string, bool) {
+	dir := filepath.Dir(file)
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir, true
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
+}

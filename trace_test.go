@@ -2,7 +2,6 @@ package jufmt_test
 
 import (
 	"bytes"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -179,8 +178,8 @@ func TestLogOutputHookDBOnly(t *testing.T) {
 	if got.Message != "persist" {
 		t.Fatalf("unexpected message %q", got.Message)
 	}
-	if got.File == "" || !strings.HasSuffix(filepath.Base(got.File), "_test.go") {
-		t.Fatalf("expected full test file path, got %q", got.File)
+	if got.File == "" || got.File != "trace_test.go" {
+		t.Fatalf("expected module-relative trace_test.go, got %q", got.File)
 	}
 	if strings.Contains(got.Message, "\033") {
 		t.Fatal("hook message should be plain text without ANSI")

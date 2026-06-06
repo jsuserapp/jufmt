@@ -28,7 +28,7 @@ main.go:30 traceTest2
 
 | 字段 | 用途 |
 |------|------|
-| `File` | **全路径**（已采集位置时）；`Print` 系列且 `SetPrintTrace(false)` 时为空 |
+| `File` | **模块相对路径**（相对最近 `go.mod` 目录）；未采集位置时为空 |
 | `Line`, `Func` | 调用位置；未采集时为空 |
 | `Message` | 纯文本，**无 ANSI**；`LineMain` 为用户内容，`LineUpstream` 为上游函数名 |
 | `Time` | 墙钟时间（始终有值） |
@@ -51,7 +51,7 @@ main.go:30 traceTest2
 
 ```go
 jufmt.SetLogOutputHook(func(e jufmt.LogEntry) *jufmt.LogHookResult {
-	go dbInsert(e) // e.File 全路径，e.Message 无 ANSI
+	go dbInsert(e) // e.File 为模块相对路径，e.Message 无 ANSI
 	return nil
 })
 ```

@@ -28,7 +28,7 @@ main.go:30 traceTest2
 
 | Field | Use |
 |-------|-----|
-| `File` | **Full path** when location was collected; empty if `SetPrintTrace(false)` on Print APIs |
+| `File` | **Module-relative path** (relative to nearest `go.mod`); empty if location not collected |
 | `Line`, `Func` | Call-site; empty when location not collected |
 | `Message` | Plain text, **no ANSI**; user content on `LineMain`, function name on `LineUpstream` |
 | `Time` | Wall-clock time (always set) |
@@ -51,7 +51,7 @@ Return `*LogHookResult` (or **`nil`** for default console output):
 
 ```go
 jufmt.SetLogOutputHook(func(e jufmt.LogEntry) *jufmt.LogHookResult {
-	go dbInsert(e) // e.File is full path, e.Message has no ANSI
+	go dbInsert(e) // e.File is module-relative, e.Message has no ANSI
 	return nil
 })
 ```
