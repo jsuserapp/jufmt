@@ -6,5 +6,5 @@
 // one line at a time; chaining partial-line writes will look messy.
 //
 // Use SetLogOutputHook for structured logging (full file paths, plain messages)
-// and optional suppression of console Output. See LogEntry and LogHookResult.
+// Return nil from the hook to keep default console formatting; see LogHookResult.
 package jufmt

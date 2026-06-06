@@ -38,42 +38,40 @@ main.go:30 traceTest2
 | `ShowLocation` | Whether `File`/`Line`/`Func` were collected for this line |
 | `Color` | ANSI hint for console formatting |
 
-Return `LogHookResult`:
+Return `*LogHookResult` (or **`nil`** for default console output):
 
-| `WriteOutput` | `Output` | Behavior |
-|---------------|----------|----------|
-| `false` | (ignored) | Nothing written to `Output` (DB-only server mode) |
-| `true` | `""` | `DefaultFormat(entry)` → basename + ANSI for terminal |
-| `true` | custom string | Your format written to `Output` |
+| Return | Behavior |
+|--------|----------|
+| **`nil`** | Write `DefaultFormat(entry)` to `Output` — use when you only need the callback |
+| `&LogHookResult{WriteOutput: false}` | Nothing written to `Output` (database-only server mode) |
+| `&LogHookResult{WriteOutput: true}` | Same as `nil` (`DefaultFormat`) |
+| `&LogHookResult{WriteOutput: true, Output: "..."}` | Custom string written to `Output` |
+
+**Callback only (default console)**
+
+```go
+jufmt.SetLogOutputHook(func(e jufmt.LogEntry) *jufmt.LogHookResult {
+	go dbInsert(e) // e.File is full path, e.Message has no ANSI
+	return nil
+})
+```
 
 **Database only (no console)**
 
 ```go
-jufmt.SetLogOutputHook(func(e jufmt.LogEntry) jufmt.LogHookResult {
-	go func() { // async insert; ordering is application-defined
-		db.Exec(`INSERT INTO logs(at,file,line,func,msg) VALUES (?,?,?,?,?)`,
-			e.Time, e.File, e.Line, e.Func, e.Message)
-	}()
-	return jufmt.LogHookResult{WriteOutput: false}
-})
-```
-
-**Database + default terminal**
-
-```go
-jufmt.SetLogOutputHook(func(e jufmt.LogEntry) jufmt.LogHookResult {
-	go dbInsert(e) // full path in e.File
-	return jufmt.LogHookResult{WriteOutput: true} // empty Output → DefaultFormat
+jufmt.SetLogOutputHook(func(e jufmt.LogEntry) *jufmt.LogHookResult {
+	go dbInsert(e)
+	return &jufmt.LogHookResult{WriteOutput: false}
 })
 ```
 
 **Custom console format**
 
 ```go
-jufmt.SetLogOutputHook(func(e jufmt.LogEntry) jufmt.LogHookResult {
+jufmt.SetLogOutputHook(func(e jufmt.LogEntry) *jufmt.LogHookResult {
 	persist(e)
 	line := fmt.Sprintf("%s %s:%d %s\n", e.TimeText, e.File, e.Line, e.Message)
-	return jufmt.LogHookResult{WriteOutput: true, Output: line}
+	return &jufmt.LogHookResult{WriteOutput: true, Output: line}
 })
 ```
 

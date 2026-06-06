@@ -38,42 +38,40 @@ main.go:30 traceTest2
 | `ShowLocation` | 本行是否采集了 `File`/`Line`/`Func` |
 | `Color` | 控制台 ANSI 参考 |
 
-返回 `LogHookResult`：
+返回 `*LogHookResult`（多数情况直接 **`return nil`** 即可，保持默认控制台输出）：
 
-| `WriteOutput` | `Output` | 行为 |
-|---------------|----------|------|
-| `false` | （忽略） | 不写 `Output`（仅入库，适合服务器） |
-| `true` | `""` | 使用 `DefaultFormat(entry)` → 控制台 basename + 颜色 |
-| `true` | 自定义字符串 | 按你的格式写入 `Output` |
+| 返回值 | 行为 |
+|--------|------|
+| **`nil`** | 写入 `DefaultFormat(entry)` — 仅需回调、不改控制台格式时使用 |
+| `&LogHookResult{WriteOutput: false}` | 不写 `Output`（仅入库） |
+| `&LogHookResult{WriteOutput: true}` | 同 `nil`（`DefaultFormat`） |
+| `&LogHookResult{WriteOutput: true, Output: "..."}` | 自定义字符串写入 `Output` |
+
+**仅回调（默认控制台）**
+
+```go
+jufmt.SetLogOutputHook(func(e jufmt.LogEntry) *jufmt.LogHookResult {
+	go dbInsert(e) // e.File 全路径，e.Message 无 ANSI
+	return nil
+})
+```
 
 **仅入库（不打印控制台）**
 
 ```go
-jufmt.SetLogOutputHook(func(e jufmt.LogEntry) jufmt.LogHookResult {
-	go func() { // 异步入库；顺序由业务自行保证
-		db.Exec(`INSERT INTO logs(at,file,line,func,msg) VALUES (?,?,?,?,?)`,
-			e.Time, e.File, e.Line, e.Func, e.Message)
-	}()
-	return jufmt.LogHookResult{WriteOutput: false}
-})
-```
-
-**入库 + 默认控制台**
-
-```go
-jufmt.SetLogOutputHook(func(e jufmt.LogEntry) jufmt.LogHookResult {
-	go dbInsert(e) // e.File 为全路径
-	return jufmt.LogHookResult{WriteOutput: true} // Output 空 → DefaultFormat
+jufmt.SetLogOutputHook(func(e jufmt.LogEntry) *jufmt.LogHookResult {
+	go dbInsert(e)
+	return &jufmt.LogHookResult{WriteOutput: false}
 })
 ```
 
 **自定义控制台格式**
 
 ```go
-jufmt.SetLogOutputHook(func(e jufmt.LogEntry) jufmt.LogHookResult {
+jufmt.SetLogOutputHook(func(e jufmt.LogEntry) *jufmt.LogHookResult {
 	persist(e)
 	line := fmt.Sprintf("%s %s:%d %s\n", e.TimeText, e.File, e.Line, e.Message)
-	return jufmt.LogHookResult{WriteOutput: true, Output: line}
+	return &jufmt.LogHookResult{WriteOutput: true, Output: line}
 })
 ```
 

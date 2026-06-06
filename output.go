@@ -40,13 +40,11 @@ type LogEntry struct {
 	ShowLocation bool     // false when SetPrintTrace(false) on non-trace APIs
 }
 
-// LogHookResult controls how a hook handles console output.
+// LogHookResult controls how a hook handles console Output.
 //
-// When WriteOutput is false, nothing is written to Output (typical for database-only
-// server logging). The hook may still persist entry using its full File path and plain Message.
-//
-// When WriteOutput is true and Output is empty, DefaultFormat(entry) is written.
-// When WriteOutput is true and Output is non-empty, Output is written as-is.
+// Hooks return *LogHookResult. Return nil to keep the default: write DefaultFormat(entry)
+// to Output. Return a non-nil value to override (for example WriteOutput: false for
+// database-only mode, or a custom Output string).
 type LogHookResult struct {
 	WriteOutput bool
 	Output      string
@@ -57,12 +55,17 @@ type LogHookResult struct {
 // The library does not perform database or network I/O. Use entry fields (full File path,
 // Line, Func, plain Message, Kind, etc.) inside the hook for persistence.
 //
+// Return nil when you only need the callback and default console output is fine.
+// Return &LogHookResult{WriteOutput: false} to skip Output entirely.
+// Return &LogHookResult{WriteOutput: true, Output: "..."} for a custom console line;
+// when WriteOutput is true and Output is empty, DefaultFormat(entry) is used.
+//
 // Keep the hook fast; defer heavy work (database inserts, RPC) with go func() if needed.
 // Async hooks lose strict ordering relative to other goroutines—document and handle that
 // in application code if ordering matters.
 //
-// Set h to nil to restore built-in console formatting.
-type LogOutputHook func(entry LogEntry) LogHookResult
+// Set h to nil to restore built-in console formatting without a hook.
+type LogOutputHook func(entry LogEntry) *LogHookResult
 
 var logOutputHook atomic.Value // stores LogOutputHook or nil
 
@@ -120,6 +123,10 @@ func emit(entry LogEntry) {
 	hook := currentLogOutputHook()
 	if hook != nil {
 		res := hook(entry)
+		if res == nil {
+			_, _ = fmt.Fprint(Output, DefaultFormat(entry))
+			return
+		}
 		if !res.WriteOutput {
 			return
 		}

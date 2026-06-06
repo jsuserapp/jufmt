@@ -166,9 +166,9 @@ func TestLogOutputHookDBOnly(t *testing.T) {
 	var got jufmt.LogEntry
 	var buf bytes.Buffer
 	jufmt.Output = &buf
-	withHook(t, func(entry jufmt.LogEntry) jufmt.LogHookResult {
+	withHook(t, func(entry jufmt.LogEntry) *jufmt.LogHookResult {
 		got = entry
-		return jufmt.LogHookResult{WriteOutput: false}
+		return &jufmt.LogHookResult{WriteOutput: false}
 	})
 
 	jufmt.Println("persist")
@@ -192,9 +192,9 @@ func TestNoStackWhenPrintTraceDisabled(t *testing.T) {
 	jufmt.SetPrintTrace(false)
 
 	var got jufmt.LogEntry
-	withHook(t, func(entry jufmt.LogEntry) jufmt.LogHookResult {
+	withHook(t, func(entry jufmt.LogEntry) *jufmt.LogHookResult {
 		got = entry
-		return jufmt.LogHookResult{WriteOutput: false}
+		return &jufmt.LogHookResult{WriteOutput: false}
 	})
 
 	jufmt.Println("no trace")
@@ -213,8 +213,8 @@ func TestLogOutputHookCustomOutput(t *testing.T) {
 
 	var buf bytes.Buffer
 	jufmt.Output = &buf
-	withHook(t, func(entry jufmt.LogEntry) jufmt.LogHookResult {
-		return jufmt.LogHookResult{WriteOutput: true, Output: "CUSTOM:" + entry.Message + "\n"}
+	withHook(t, func(entry jufmt.LogEntry) *jufmt.LogHookResult {
+		return &jufmt.LogHookResult{WriteOutput: true, Output: "CUSTOM:" + entry.Message + "\n"}
 	})
 
 	jufmt.Println("x")
@@ -224,14 +224,33 @@ func TestLogOutputHookCustomOutput(t *testing.T) {
 	}
 }
 
+func TestLogOutputHookNilUsesDefault(t *testing.T) {
+	jufmt.SetPrintTime(false)
+	jufmt.SetPrintTrace(true)
+
+	var buf bytes.Buffer
+	jufmt.Output = &buf
+	withHook(t, func(entry jufmt.LogEntry) *jufmt.LogHookResult {
+		_ = entry
+		return nil
+	})
+
+	jufmt.Println("default")
+
+	want := stripANSI(buf.String())
+	if !strings.Contains(want, "trace_test.go:") || !strings.Contains(want, "default") {
+		t.Fatalf("nil hook result should use DefaultFormat, got %q", want)
+	}
+}
+
 func TestLogOutputHookDefaultFormat(t *testing.T) {
 	jufmt.SetPrintTime(false)
 	jufmt.SetPrintTrace(true)
 
 	var buf bytes.Buffer
 	jufmt.Output = &buf
-	withHook(t, func(entry jufmt.LogEntry) jufmt.LogHookResult {
-		return jufmt.LogHookResult{WriteOutput: true}
+	withHook(t, func(entry jufmt.LogEntry) *jufmt.LogHookResult {
+		return &jufmt.LogHookResult{WriteOutput: true}
 	})
 
 	jufmt.Println("y")
