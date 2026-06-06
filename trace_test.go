@@ -2,6 +2,7 @@ package jufmt_test
 
 import (
 	"bytes"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -17,6 +18,16 @@ func withOutput(t *testing.T, fn func()) string {
 	t.Cleanup(func() { jufmt.Output = old })
 	fn()
 	return buf.String()
+}
+
+func withHook(t *testing.T, h jufmt.LogOutputHook) {
+	t.Helper()
+	old := jufmt.Output
+	jufmt.SetLogOutputHook(h)
+	t.Cleanup(func() {
+		jufmt.SetLogOutputHook(nil)
+		jufmt.Output = old
+	})
 }
 
 func stripANSI(s string) string {
@@ -146,4 +157,87 @@ func TestGetTraceDepth(t *testing.T) {
 func captureDepth1(t *testing.T) {
 	t.Helper()
 	jufmt.Println(jufmt.GetTrace(1))
+}
+
+func TestLogOutputHookDBOnly(t *testing.T) {
+	jufmt.SetPrintTime(false)
+	jufmt.SetPrintTrace(true)
+
+	var got jufmt.LogEntry
+	var buf bytes.Buffer
+	jufmt.Output = &buf
+	withHook(t, func(entry jufmt.LogEntry) jufmt.LogHookResult {
+		got = entry
+		return jufmt.LogHookResult{WriteOutput: false}
+	})
+
+	jufmt.Println("persist")
+
+	if buf.Len() != 0 {
+		t.Fatalf("expected no Output, got %q", buf.String())
+	}
+	if got.Message != "persist" {
+		t.Fatalf("unexpected message %q", got.Message)
+	}
+	if got.File == "" || !strings.HasSuffix(filepath.Base(got.File), "_test.go") {
+		t.Fatalf("expected full test file path, got %q", got.File)
+	}
+	if strings.Contains(got.Message, "\033") {
+		t.Fatal("hook message should be plain text without ANSI")
+	}
+}
+
+func TestNoStackWhenPrintTraceDisabled(t *testing.T) {
+	jufmt.SetPrintTime(false)
+	jufmt.SetPrintTrace(false)
+
+	var got jufmt.LogEntry
+	withHook(t, func(entry jufmt.LogEntry) jufmt.LogHookResult {
+		got = entry
+		return jufmt.LogHookResult{WriteOutput: false}
+	})
+
+	jufmt.Println("no trace")
+
+	if got.ShowLocation {
+		t.Fatalf("ShowLocation should be false, got %+v", got)
+	}
+	if got.File != "" || got.Line != 0 || got.Func != "" {
+		t.Fatalf("location fields should be empty, got %+v", got)
+	}
+}
+
+func TestLogOutputHookCustomOutput(t *testing.T) {
+	jufmt.SetPrintTime(false)
+	jufmt.SetPrintTrace(false)
+
+	var buf bytes.Buffer
+	jufmt.Output = &buf
+	withHook(t, func(entry jufmt.LogEntry) jufmt.LogHookResult {
+		return jufmt.LogHookResult{WriteOutput: true, Output: "CUSTOM:" + entry.Message + "\n"}
+	})
+
+	jufmt.Println("x")
+
+	if buf.String() != "CUSTOM:x\n" {
+		t.Fatalf("unexpected output %q", buf.String())
+	}
+}
+
+func TestLogOutputHookDefaultFormat(t *testing.T) {
+	jufmt.SetPrintTime(false)
+	jufmt.SetPrintTrace(true)
+
+	var buf bytes.Buffer
+	jufmt.Output = &buf
+	withHook(t, func(entry jufmt.LogEntry) jufmt.LogHookResult {
+		return jufmt.LogHookResult{WriteOutput: true}
+	})
+
+	jufmt.Println("y")
+
+	want := stripANSI(buf.String())
+	if !strings.Contains(want, "trace_test.go:") || !strings.Contains(want, "y") {
+		t.Fatalf("expected default format, got %q", want)
+	}
 }

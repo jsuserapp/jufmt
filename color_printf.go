@@ -1,6 +1,9 @@
 package jufmt
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // Color wraps an ANSI escape sequence for terminal text styling.
 type Color struct {
@@ -9,25 +12,27 @@ type Color struct {
 
 // Printf writes formatted, colored text to Output without a trailing newline.
 func (c Color) Printf(format string, a ...interface{}) {
-	_, _ = fmt.Fprint(Output, buildPrefix(0, false)+c.Sprintf(format, a...))
+	emitMain(c, false, fmt.Sprintf(format, a...), false)
 }
 
 // Println writes colored text to Output with a trailing newline.
 func (c Color) Println(a ...interface{}) {
-	_, _ = fmt.Fprint(Output, buildPrefix(0, false)+c.Sprintln(a...))
+	msg := fmt.Sprintln(a...)
+	emitMain(c, false, trimNewline(msg), true)
 }
 
 // Print writes colored text to Output without a trailing newline.
 func (c Color) Print(a ...interface{}) {
-	_, _ = fmt.Fprint(Output, buildPrefix(0, false)+c.Sprint(a...))
+	emitMain(c, false, fmt.Sprint(a...), false)
 }
 
 func (c Color) tracePrintln(forceTrace bool, a ...interface{}) {
-	_, _ = fmt.Fprint(Output, buildPrefix(0, forceTrace)+c.Sprintln(a...))
+	msg := fmt.Sprintln(a...)
+	emitMain(c, forceTrace, trimNewline(msg), true)
 }
 
 func (c Color) tracePrintf(forceTrace bool, format string, a ...interface{}) {
-	_, _ = fmt.Fprint(Output, buildPrefix(0, forceTrace)+c.Sprintf(format, a...))
+	emitMain(c, forceTrace, fmt.Sprintf(format, a...), false)
 }
 
 // TracePrintln writes a message with optional upstream call-site lines.
@@ -42,12 +47,15 @@ func (c Color) TracePrintln(exStep int, a ...any) {
 	if exStep < 0 {
 		exStep = 0
 	}
+	frames := traceableFrames()
 	for i := exStep; i >= 1; i-- {
-		if prefix, name, ok := formatCallLine(i); ok {
-			_, _ = fmt.Fprint(Output, prefix+c.Sprintf("%s\n", name))
+		if entry, ok := buildUpstreamEntry(frames, i); ok {
+			entry.Color = c
+			emit(entry)
 		}
 	}
-	c.tracePrintln(true, a...)
+	msg := fmt.Sprintln(a...)
+	emitMainFromFrames(c, frames, true, trimNewline(msg), true)
 }
 
 // TracePrintf is like TracePrintln but with fmt.Printf-style formatting.
@@ -55,12 +63,18 @@ func (c Color) TracePrintf(exStep int, format string, a ...any) {
 	if exStep < 0 {
 		exStep = 0
 	}
+	frames := traceableFrames()
 	for i := exStep; i >= 1; i-- {
-		if prefix, name, ok := formatCallLine(i); ok {
-			_, _ = fmt.Fprint(Output, prefix+c.Sprintf("%s\n", name))
+		if entry, ok := buildUpstreamEntry(frames, i); ok {
+			entry.Color = c
+			emit(entry)
 		}
 	}
-	c.tracePrintf(true, format, a...)
+	emitMainFromFrames(c, frames, true, fmt.Sprintf(format, a...), false)
+}
+
+func trimNewline(s string) string {
+	return strings.TrimSuffix(s, "\n")
 }
 
 // Sprintf returns a formatted string wrapped with ANSI color codes.

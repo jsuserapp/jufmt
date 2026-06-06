@@ -1,33 +1,34 @@
 package jufmt
 
-import gofmt "fmt"
+import "fmt"
 
 // Printf writes formatted text to Output in bright white without a trailing newline.
 // Timestamps and call-site prefixes follow SetPrintTime and SetPrintTrace.
 func Printf(format string, a ...any) {
-	gofmt.Fprint(Output, buildPrefix(0, false)+BrightWhite.Sprintf(format, a...))
+	emitMain(BrightWhite, false, fmt.Sprintf(format, a...), false)
 }
 
 // Println writes text to Output in bright white with a trailing newline.
 // Timestamps and call-site prefixes follow SetPrintTime and SetPrintTrace.
 func Println(a ...any) {
-	gofmt.Fprint(Output, buildPrefix(0, false)+BrightWhite.Sprintln(a...))
+	msg := fmt.Sprintln(a...)
+	emitMain(BrightWhite, false, trimNewline(msg), true)
 }
 
 // Print writes text to Output in bright white without a trailing newline.
 // Timestamps and call-site prefixes follow SetPrintTime and SetPrintTrace.
 func Print(a ...any) {
-	gofmt.Fprint(Output, buildPrefix(0, false)+BrightWhite.Sprint(a...))
+	emitMain(BrightWhite, false, fmt.Sprint(a...), false)
 }
 
 // Sprintf formats text without writing to Output or adding color prefixes.
 func Sprintf(format string, a ...any) string {
-	return gofmt.Sprintf(format, a...)
+	return fmt.Sprintf(format, a...)
 }
 
 // Errorf builds an error with fmt.Errorf; it does not write to Output.
 func Errorf(format string, a ...any) error {
-	return gofmt.Errorf(format, a...)
+	return fmt.Errorf(format, a...)
 }
 
 // TracePrintln writes a bright-white message with optional upstream call-site lines.

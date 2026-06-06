@@ -1,10 +1,8 @@
 package jufmt
 
 import (
-	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -16,9 +14,8 @@ import (
 const pkgPath = "github.com/jsuserapp/jufmt"
 
 // Output is the destination for Print/Println/Printf and Color print methods.
-// It defaults to os.Stdout. Assign any io.Writer to redirect output—for example
-// an open file, bytes.Buffer, io.MultiWriter, or a custom writer that persists
-// records to a database or log service. See README "Redirecting output" for examples.
+// It defaults to os.Stdout. Use SetLogOutputHook for structured logging or to
+// suppress console output; assign Output to redirect formatted text elsewhere.
 var Output io.Writer = os.Stdout
 
 var (
@@ -31,13 +28,16 @@ func init() {
 	printTrace.Store(true)
 }
 
-// SetPrintTime enables or disables timestamps in printed output.
+// SetPrintTime enables or disables timestamp prefixes in printed output.
+// When disabled, TimeText stays empty and timestamp formatting is skipped.
+// LogEntry.Time is still set for hooks that need a wall-clock value.
 func SetPrintTime(enabled bool) {
 	printTime.Store(enabled)
 }
 
-// SetPrintTrace enables or disables call-site prefixes in Print/Println/Printf.
-// TracePrintln and TracePrintf always include call-site information.
+// SetPrintTrace enables or disables call-site collection and prefixes on Print/Println/Printf.
+// When disabled, stack frames are not collected for those APIs (same as SetPrintTime skipping
+// timestamp formatting). TracePrintln, TracePrintf, and Logger always collect call-site data.
 func SetPrintTrace(enabled bool) {
 	printTrace.Store(enabled)
 }
@@ -73,7 +73,14 @@ func GetCallerName(depth int) string {
 }
 
 func formatFrame(frame runtime.Frame) string {
-	return fmt.Sprintf("%s:%d", path.Base(frame.File), frame.Line)
+	return formatFrameLocation(frame.File, frame.Line)
+}
+
+func frameAt(frames []runtime.Frame, depth int) (runtime.Frame, bool) {
+	if depth < 0 || depth >= len(frames) {
+		return runtime.Frame{}, false
+	}
+	return frames[depth], true
 }
 
 func frameFuncName(frame runtime.Frame) string {
@@ -91,11 +98,7 @@ func frameFuncName(frame runtime.Frame) string {
 }
 
 func getTraceableFrameAt(depth int) (runtime.Frame, bool) {
-	frames := traceableFrames()
-	if depth < 0 || depth >= len(frames) {
-		return runtime.Frame{}, false
-	}
-	return frames[depth], true
+	return frameAt(traceableFrames(), depth)
 }
 
 func isInternalFrame(frame runtime.Frame) bool {
@@ -150,38 +153,4 @@ func traceableFrames() []runtime.Frame {
 		}
 	}
 	return out
-}
-
-// formatCallLine builds the prefix and function name for an upstream call line at depth.
-// Returns ok=false when that depth has no traceable frame.
-func formatCallLine(depth int) (prefix, funcName string, ok bool) {
-	frame, ok := getTraceableFrameAt(depth)
-	if !ok {
-		return "", "", false
-	}
-	if printTime.Load() {
-		prefix += GetNowTimeMs() + " "
-	}
-	prefix += formatFrame(frame) + " "
-	return prefix, frameFuncName(frame), true
-}
-
-// buildPrefix assembles the time and call-site prefix for a print call.
-// forceTrace includes call-site even when the global printTrace flag is off.
-// traceDepth selects which external frame to show (0 = direct caller).
-func buildPrefix(traceDepth int, forceTrace bool) string {
-	var prefix string
-	if printTime.Load() {
-		prefix += GetNowTimeMs() + " "
-	}
-	if forceTrace || printTrace.Load() {
-		loc := GetTrace(traceDepth)
-		if loc == "" && traceDepth == 0 {
-			loc = "unknown:0"
-		}
-		if loc != "" {
-			prefix += loc + " "
-		}
-	}
-	return prefix
 }

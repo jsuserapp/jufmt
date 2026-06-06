@@ -4,4 +4,7 @@
 // It is a partial replacement for the standard fmt and log packages. Most call
 // patterns are compatible. Because each print adds a prefix, output is usually
 // one line at a time; chaining partial-line writes will look messy.
+//
+// Use SetLogOutputHook for structured logging (full file paths, plain messages)
+// and optional suppression of console Output. See LogEntry and LogHookResult.
 package jufmt
